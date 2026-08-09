@@ -1,0 +1,41 @@
+{
+  "layer": "top",
+  "position": "bottom",
+  "height": 30,
+  "spacing": 0,
+  "modules-left": [
+    "image#foot",
+    "image#chrome",
+    "image#parsec",
+    "wlr/taskbar"
+  ],
+  "modules-right": ["clock"],
+  "image#foot": {
+    "path": "/usr/share/icons/hicolor/48x48/apps/foot.png",
+    "size": 20,
+    "tooltip-format": "foot",
+    "on-click": "/usr/bin/foot"
+  },
+  "image#chrome": {
+    "path": "/opt/google/chrome/product_logo_256.png",
+    "size": 20,
+    "tooltip-format": "Chrome",
+    "on-click": "/usr/local/bin/chrome-auto"
+  },
+  "image#parsec": {
+    "path": "/usr/share/icons/hicolor/256x256/apps/parsecd.png",
+    "size": 20,
+    "tooltip-format": "Parsec",
+    "on-click": "/usr/local/bin/parsec-auto"
+  },
+  "wlr/taskbar": {
+    "format": "{icon} {title}",
+    "icon-size": 20,
+    "tooltip-format": "{app_id}: {title}",
+    "on-click": "minimize-raise",
+    "on-click-middle": "close"
+  },
+  "clock": {
+    "format": "{:%H:%M}"
+  }
+}

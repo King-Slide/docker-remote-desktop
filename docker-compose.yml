@@ -1,0 +1,20 @@
+services:
+  docker-remote-desktop:
+    image: ghcr.io/king-slide/docker-remote-desktop:latest
+    container_name: docker-remote-desktop
+    privileged: true
+    environment:
+      PUID: ${PUID:-1000}
+      PGID: ${PGID:-1000}
+      TZ: ${TZ:-Europe/Berlin}
+      START_DOCKER: "false"
+      KEYBOARD_LAYOUT: ${KEYBOARD_LAYOUT:-us}
+    ports:
+      - "${HTTP_PORT:-3000}:3000"
+      - "${HTTPS_PORT:-3001}:3001"
+    volumes:
+      - config:/config
+    restart: unless-stopped
+
+volumes:
+  config:

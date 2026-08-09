@@ -1,0 +1,3 @@
+#!/bin/bash
+
+(sleep 2; exec dbus-run-session -- waybar --config /app/waybar.jsonc --style /app/waybar.css) &

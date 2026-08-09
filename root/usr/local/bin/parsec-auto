@@ -1,0 +1,126 @@
+#!/bin/bash
+
+set -u
+
+config_dir="${HOME:-/config}/.parsec"
+config_file="${config_dir}/config.json"
+software_marker="${config_dir}/decoder-auto-software"
+va_device=""
+va_driver=""
+va_info=""
+parsec_hardware=false
+
+/usr/local/bin/apply-keyboard-layout
+
+try_vaapi() {
+  local device="$1"
+  local driver="$2"
+  local output
+
+  if [ -n "${driver}" ]; then
+    output=$(LIBVA_DRIVER_NAME="${driver}" vainfo --display drm --device "${device}" 2>&1) || return 1
+  else
+    output=$(vainfo --display drm --device "${device}" 2>&1) || return 1
+  fi
+
+  if ! grep -Eq 'VAProfileH264.*VAEntrypointVLD' <<< "${output}"; then
+    return 1
+  fi
+
+  va_device="${device}"
+  va_driver="${driver}"
+  va_info="${output}"
+  return 0
+}
+
+render_devices=()
+if [ -n "${DRINODE:-}" ]; then
+  render_devices+=("${DRINODE}")
+elif [ -n "${DRI_NODE:-}" ]; then
+  render_devices+=("${DRI_NODE}")
+else
+  shopt -s nullglob
+  render_devices=(/dev/dri/renderD*)
+  shopt -u nullglob
+fi
+
+for render_device in "${render_devices[@]}"; do
+  if [ ! -c "${render_device}" ] || [ ! -r "${render_device}" ] || [ ! -w "${render_device}" ]; then
+    continue
+  fi
+
+  if try_vaapi "${render_device}" ""; then
+    break
+  fi
+
+  for fallback_driver in i965 iHD; do
+    if [ "${LIBVA_DRIVER_NAME:-}" = "${fallback_driver}" ]; then
+      continue
+    fi
+    if try_vaapi "${render_device}" "${fallback_driver}"; then
+      break 2
+    fi
+  done
+done
+
+if [ -n "${va_device}" ]; then
+  parsec_hardware=true
+fi
+
+if [ "${parsec_hardware}" = true ] && [ -n "${va_driver}" ]; then
+  export LIBVA_DRIVER_NAME="${va_driver}"
+fi
+
+mkdir -p "${config_dir}"
+
+if [ ! -e "${config_file}" ]; then
+  printf '%s\n' '["Managed by Parsec. See https://parsec.app/config for documentation.", {}]' > "${config_file}"
+fi
+
+if jq -e 'type == "array" and (.[1] | type == "object")' "${config_file}" >/dev/null 2>&1; then
+  temp_file=$(mktemp "${config_dir}/config.json.XXXXXX")
+  remove_software_marker=false
+
+  if [ "${parsec_hardware}" = true ]; then
+    jq_filter='.'
+
+    if [ -e "${software_marker}" ]; then
+      jq_filter='.[1] |= del(.client_decoder_index)'
+      remove_software_marker=true
+    fi
+
+    if ! grep -Eq 'VAProfileHEVC.*VAEntrypointVLD' <<< "${va_info}"; then
+      jq_filter="${jq_filter} | .[1].client_decoder_h265.value = false"
+    fi
+
+    if [ -n "${va_driver}" ]; then
+      echo "Parsec: VAAPI H.264 decoding works on ${va_device} with ${va_driver}." >&2
+    else
+      echo "Parsec: VAAPI H.264 decoding works on ${va_device} with the default driver." >&2
+    fi
+  else
+    jq_filter='.[1].client_decoder_index.value = 3
+      | .[1].client_decoder_h265.value = false
+      | .[1].client_decoder_444.value = false
+      | .[1].client_decoder_10bit.value = false'
+    echo "Parsec: no working VAAPI H.264 decoder found; using the software decoder." >&2
+  fi
+
+  if jq "${jq_filter}" "${config_file}" > "${temp_file}"; then
+    chmod --reference="${config_file}" "${temp_file}" 2>/dev/null || chmod 600 "${temp_file}"
+    mv "${temp_file}" "${config_file}"
+
+    if [ "${parsec_hardware}" = false ]; then
+      touch "${software_marker}"
+    elif [ "${remove_software_marker}" = true ]; then
+      rm -f "${software_marker}"
+    fi
+  else
+    rm -f "${temp_file}"
+    echo "Parsec: failed to update ${config_file}; leaving it unchanged." >&2
+  fi
+else
+  echo "Parsec: ${config_file} is not valid Parsec JSON; leaving it unchanged." >&2
+fi
+
+exec /usr/bin/parsecd "$@"

@@ -1,0 +1,12 @@
+#!/bin/bash
+
+layout="${KEYBOARD_LAYOUT:-us}"
+
+if [ -z "${DISPLAY:-}" ]; then
+  exit 0
+fi
+
+if ! setxkbmap -model pc105 -layout "${layout}"; then
+  echo "Invalid KEYBOARD_LAYOUT '${layout}', falling back to 'us'" >&2
+  setxkbmap -model pc105 -layout us
+fi

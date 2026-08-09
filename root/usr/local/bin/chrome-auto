@@ -1,0 +1,28 @@
+#!/bin/bash
+
+set -u
+
+profile_dir="${HOME:-/config}/.config/google-chrome"
+minimum_shm_size=$((1024 * 1024 * 1024))
+chrome_args=()
+
+# Chrome's profile survives container replacement, but its hostname-based lock
+# does not. Only clear transient locks when this user has no Chrome process.
+if ! pgrep -u "$(id -u)" -x chrome >/dev/null 2>&1; then
+  rm -f \
+    "${profile_dir}/SingletonLock" \
+    "${profile_dir}/SingletonCookie" \
+    "${profile_dir}/SingletonSocket"
+fi
+
+shm_size=$(df --block-size=1 --output=size /dev/shm 2>/dev/null | tail -n 1 | tr -d '[:space:]')
+if ! [[ "${shm_size}" =~ ^[0-9]+$ ]] || (( shm_size < minimum_shm_size )); then
+  chrome_args+=(--disable-dev-shm-usage)
+fi
+
+exec /usr/bin/google-chrome \
+  "${chrome_args[@]}" \
+  --no-first-run \
+  --start-maximized \
+  --ozone-platform=wayland \
+  "$@"
